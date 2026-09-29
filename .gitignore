@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.angular/
+.env
+*.log
+server/uploads/*
+!server/uploads/.gitkeep

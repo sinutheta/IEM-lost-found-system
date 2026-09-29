@@ -1,0 +1,25 @@
+:root{--ink:#1b2a3a;--line:#e3e6ea;--mut:#7b8590;--bg:#f6f7f8}
+*{box-sizing:border-box}body{margin:0;height:100vh;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#e9ecef;font-family:system-ui,Segoe UI,Roboto,sans-serif;color:var(--ink)}
+.phone{flex:none;height:min(calc(100vh - 32px),820px);aspect-ratio:9/16;max-width:calc(100vw - 16px);background:#fff;display:flex;flex-direction:column;border:8px solid var(--ink);border-radius:34px;box-shadow:0 20px 50px #0004;overflow:hidden}
+main{flex:1;min-height:0;overflow-y:auto}.pad{padding:16px 20px}
+.bar{display:flex;align-items:center;justify-content:center;position:relative;padding:18px;border-bottom:1px solid var(--line)}.bar h2{margin:0;font-size:18px}.back{position:absolute;left:18px;font-size:20px;color:var(--ink);text-decoration:none}
+.tabs{flex:none;display:flex;background:#fff;border-top:1px solid var(--line)}
+.tabs a{flex:1;text-align:center;padding:10px 0;font-size:11px;color:var(--mut);text-decoration:none}.tabs i{display:block;font-style:normal;font-size:18px}.tabs a.on{color:var(--ink);font-weight:700;border-bottom:3px solid var(--ink)}
+.search{display:flex;gap:8px;align-items:center;background:var(--bg);border:1px solid var(--line);border-radius:24px;padding:10px 16px}.search input{border:0;background:none;outline:0;flex:1;font-size:15px}
+.pills{display:flex;gap:10px;margin:14px 0}.pills button{flex:1;padding:10px;border-radius:22px;border:1px solid var(--line);background:#fff;font-size:15px;cursor:pointer}.pills .on{background:var(--ink);color:#fff}
+.label{font-size:12px;letter-spacing:.06em;font-weight:700;color:#555;margin:14px 0 6px}
+.row{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);text-decoration:none;color:inherit}.grow{flex:1;display:flex;flex-direction:column;gap:3px}small,.muted{color:var(--mut);font-size:12px}
+.thumb,.photo{background:repeating-linear-gradient(135deg,#f3f3f3 0 6px,#e9e9e9 6px 12px);border:1px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:11px;overflow:hidden}
+.thumb{width:52px;height:52px}.photo{height:160px;margin-bottom:12px}.thumb img,.photo img{width:100%;height:100%;object-fit:cover}
+.badge{border:1px solid var(--ink);border-radius:12px;padding:3px 10px;font-size:11px;font-weight:700;letter-spacing:.05em}.badge.found{background:#eef1f4}
+.title{display:flex;justify-content:space-between;align-items:center}.title h3{margin:4px 0}
+.box{border:1px dashed #ccc;border-radius:8px;padding:12px;font-size:14px;background:var(--bg)}.who{display:flex;gap:12px;align-items:center}.who small{display:block}.avatar{width:36px;height:36px;border-radius:50%;border:1px solid #ccc;background:#fff}
+.btns{display:flex;gap:12px;margin:18px 0}.btn{flex:1;padding:13px;border-radius:8px;border:1px solid var(--ink);background:var(--ink);color:#fff;font-weight:700;text-align:center;text-decoration:none;cursor:pointer;font-size:14px;display:block;width:100%}.btn.ghost{background:#fff;color:var(--ink)}.btn.sm{padding:8px;font-size:12px}
+label{display:block;font-size:12px;letter-spacing:.06em;font-weight:700;color:#555;margin:14px 0 6px}
+input.f,select.f,textarea.f{width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:15px;font-family:inherit}
+.seg{display:flex;border:1px solid var(--ink);border-radius:8px;overflow:hidden}.seg button{flex:1;padding:12px;border:0;background:#fff;font-weight:600;cursor:pointer}.seg .on{background:var(--ink);color:#fff}
+.login{padding:30px 24px;text-align:center}.login .logo{height:64px}.login h1{font-size:20px;margin:10px 0 2px}.login form{text-align:left}.err{color:#b3261e;font-size:13px;margin:10px 0}.ok{color:#1a7f45;font-size:13px;margin:10px 0}
+.link{background:none;border:0;color:var(--ink);font-weight:700;cursor:pointer;text-decoration:underline}.note{display:flex;gap:8px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}.dot{color:#2b6cb0}
+
+/* real phones: fill the whole screen instead of showing the frame */
+@media (max-width:520px){body{display:block;height:auto;overflow:auto}.phone{height:100vh;height:100dvh;width:100%;max-width:none;aspect-ratio:auto;border:0;border-radius:0;box-shadow:none}}
