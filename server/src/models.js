@@ -18,6 +18,8 @@ const Item = model('Item', new Schema({
   location: { type: String, required: true },
   date: { type: Date, default: Date.now },
   photo: String,
+  // open = in the queue / visible & matchable, claim_pending = removed from the queue while an admin reviews,
+  // returned = handed back, cancelled = withdrawn by the reporter
   status: { type: String, enum: ['open','claim_pending','returned','cancelled'], default: 'open' },
   reporter: ref('User'),
   verificationQuestion: String,
@@ -27,14 +29,21 @@ const Item = model('Item', new Schema({
 const matchSchema = new Schema({
   lost: ref('Item'), found: ref('Item'),
   score: { type: Number, min: 0, max: 100 },
-  status: { type: String, enum: ['suggested','claimed','dismissed'], default: 'suggested' },
-  notified: { type: Boolean, default: false },
+  keywordScore: Number,
+  aiScore: Number,
+  method: { type: String, enum: ['keyword','ai','manual'], default: 'keyword' },
+  reason: String,                      // AI explanation or "Linked manually by ..."
+  photos: { type: Number, default: 0 }, // how many photos the AI looked at (0-2)
+  createdBy: ref('User'),              // set for manual matches
+  status: { type: String, enum: ['suggested','claimed','resolved','dismissed'], default: 'suggested' },
 }, { timestamps: true });
 matchSchema.index({ lost: 1, found: 1 }, { unique: true });
 const Match = model('Match', matchSchema);
 
 const Claim = model('Claim', new Schema({
   item: ref('Item'), match: ref('Match'), claimant: ref('User'), answer: String,
+  side: { type: String, enum: ['owner','finder'], default: 'owner' }, // owner = lost reporter, finder = found reporter
+  note: String,
   status: { type: String, enum: ['pending_review','approved','rejected'], default: 'pending_review' },
   reviewedBy: ref('User'), reviewedAt: Date,
 }, { timestamps: true }));
