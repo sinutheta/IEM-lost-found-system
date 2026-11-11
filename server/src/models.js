@@ -44,11 +44,17 @@ const Claim = model('Claim', new Schema({
   item: ref('Item'), match: ref('Match'), claimant: ref('User'), answer: String,
   side: { type: String, enum: ['owner','finder'], default: 'owner' }, // owner = lost reporter, finder = found reporter
   note: String,
+  failedAttempts: { type: Number, default: 0 },
   status: { type: String, enum: ['pending_review','approved','rejected'], default: 'pending_review' },
   reviewedBy: ref('User'), reviewedAt: Date,
 }, { timestamps: true }));
 
-const lockSchema = new Schema({ user: ref('User'), item: ref('Item'), until: Date });
+const lockSchema = new Schema({
+  user: ref('User'),
+  item: ref('Item'),
+  failedAttempts: { type: Number, default: 0 },
+  until: Date,
+}, { timestamps: true });
 lockSchema.index({ until: 1 }, { expireAfterSeconds: 0 });
 lockSchema.index({ user: 1, item: 1 }, { unique: true });
 const ClaimLock = model('ClaimLock', lockSchema);

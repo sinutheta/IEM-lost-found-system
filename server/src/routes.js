@@ -145,11 +145,31 @@ router.get('/matches', auth, adminOnly, wrap(async (req, res) => {
 }));
 
 // ---------- Claims (verification question -> admin review) ----------
-const lockOf = (user, item) => ClaimLock.findOne({ user, item, until: { $gt: new Date() } });
-const lockUser = async (user, item) => {
-  const until = new Date(Date.now() + LOCK_MIN * 60000);
-  await ClaimLock.findOneAndUpdate({ user, item }, { until }, { upsert: true });
-  return until;
+const lockOf = async (user, item) => {
+  const record = await ClaimLock.findOne({ user, item });
+  if (record && record.until && record.until > new Date()) return record;
+  return null;
+};
+const recordFailedAttempt = async (user, item) => {
+  let record = await ClaimLock.findOne({ user, item });
+  if (!record) record = new ClaimLock({ user, item, failedAttempts: 0 });
+  if (record.until && record.until <= new Date()) {
+    record.failedAttempts = 0;
+    record.until = undefined;
+  }
+  record.failedAttempts = (record.failedAttempts || 0) + 1;
+  if (record.failedAttempts >= 3) {
+    record.until = new Date(Date.now() + LOCK_MIN * 60000);
+    record.failedAttempts = 0;
+    await record.save();
+    return { locked: true, until: record.until, failedAttempts: 3, remaining: 0 };
+  }
+  await record.save();
+  const remaining = 3 - record.failedAttempts;
+  return { locked: false, failedAttempts: record.failedAttempts, remaining };
+};
+const resetFailedAttempts = async (user, item) => {
+  await ClaimLock.deleteOne({ user, item });
 };
 
 // Takes the found item (and its matched lost report) out of the queue and opens the claim for admin review
@@ -180,11 +200,15 @@ router.post('/items/:id/claim', auth, wrap(async (req, res) => {
   if (item.status !== 'open') return res.status(409).json({ message: 'This item is not available to claim' });
   if (same(item.reporter, req.user.id)) return res.status(400).json({ message: 'You reported this item' });
   const lock = await lockOf(req.user.id, item.id);
-  if (lock) return res.status(423).json({ message: 'Too many wrong attempts. Try again later.', until: lock.until });
+  if (lock) return res.status(423).json({ message: 'Claim is locked due to 3 consecutive wrong attempts. Try again later.', until: lock.until });
   if (!item.verificationAnswerHash || !(await bcrypt.compare(normAns(req.body.answer), item.verificationAnswerHash))) {
-    const until = await lockUser(req.user.id, item.id);
-    return res.status(403).json({ message: `Incorrect answer. Locked for ${LOCK_MIN} minutes.`, until });
+    const outcome = await recordFailedAttempt(req.user.id, item.id);
+    if (outcome.locked) {
+      return res.status(423).json({ message: `Incorrect answer. 3 failed attempts reached. Locked for ${LOCK_MIN} minutes.`, until: outcome.until });
+    }
+    return res.status(403).json({ message: `Incorrect answer. ${outcome.remaining} attempt(s) remaining before a 30-minute lockout.`, failedAttempts: outcome.failedAttempts, remaining: outcome.remaining });
   }
+  await resetFailedAttempts(req.user.id, item.id);
   const mine = await Item.find({ reporter: req.user.id, type: 'lost', status: 'open' }).distinct('_id');
   const match = await Match.findOne({ found: item.id, lost: { $in: mine }, status: 'suggested' });
   const claim = await openClaim({ found: item, lost: match?.lost, match, claimant: req.user.id, answer: req.body.answer, side: 'owner' });
@@ -203,11 +227,15 @@ router.post('/matches/:id/claim', auth, wrap(async (req, res) => {
   if (isOwner === isFinder) return res.status(isOwner ? 400 : 403).json({ message: isOwner ? 'Both reports are yours' : 'Only the two reporters can claim this match' });
   if (isOwner) {
     const lock = await lockOf(req.user.id, found.id);
-    if (lock) return res.status(423).json({ message: 'Too many wrong attempts. Try again later.', until: lock.until });
+    if (lock) return res.status(423).json({ message: 'Claim is locked due to 3 consecutive wrong attempts. Try again later.', until: lock.until });
     if (!found.verificationAnswerHash || !(await bcrypt.compare(normAns(req.body.answer), found.verificationAnswerHash))) {
-      const until = await lockUser(req.user.id, found.id);
-      return res.status(403).json({ message: `Incorrect answer. Locked for ${LOCK_MIN} minutes.`, until });
+      const outcome = await recordFailedAttempt(req.user.id, found.id);
+      if (outcome.locked) {
+        return res.status(423).json({ message: `Incorrect answer. 3 failed attempts reached. Locked for ${LOCK_MIN} minutes.`, until: outcome.until });
+      }
+      return res.status(403).json({ message: `Incorrect answer. ${outcome.remaining} attempt(s) remaining before a 30-minute lockout.`, failedAttempts: outcome.failedAttempts, remaining: outcome.remaining });
     }
+    await resetFailedAttempts(req.user.id, found.id);
   }
   const claim = await openClaim({ found, lost, match: m, claimant: req.user.id, answer: req.body.answer, side: isOwner ? 'owner' : 'finder', note: String(req.body.note || '').slice(0, 300) });
   if (!claim) return res.status(409).json({ message: 'This item is no longer available to claim' });
