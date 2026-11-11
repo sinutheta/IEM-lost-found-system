@@ -36,6 +36,7 @@ export class Api {
 
   // admin + notifications
   claims() { return this.http.get<any[]>('/api/claims'); }
+  stats() { return this.http.get<any>('/api/admin/stats'); }
   review(id: string, action: 'approve' | 'reject') { return this.http.post(`/api/claims/${id}/${action}`, {}); }
   notifications() { return this.http.get<any[]>('/api/notifications'); }
   markRead() { return this.http.post('/api/notifications/read', {}); }

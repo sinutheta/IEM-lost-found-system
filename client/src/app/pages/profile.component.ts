@@ -10,6 +10,34 @@ import { Api, Item } from '../core/api';
     <div class="box who"><div class="avatar"></div><div><b>{{ auth.user()?.name }}</b><small>{{ auth.user()?.email }}</small><small>{{ auth.user()?.userType }} · {{ auth.user()?.department }}</small></div></div>
 
     @if (auth.user()?.userType === 'admin') {
+      <div class="label">ADMIN DASHBOARD STATISTICS</div>
+      <div class="box" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;text-align:center">
+        <div style="background:#fff;padding:8px;border-radius:6px;border:1px solid var(--line)">
+          <div style="font-size:20px;font-weight:700">{{ stats?.totalReports ?? 0 }}</div>
+          <small>Total Reports</small>
+        </div>
+        <div style="background:#fff;padding:8px;border-radius:6px;border:1px solid var(--line)">
+          <div style="font-size:20px;font-weight:700">{{ stats?.activeReports ?? 0 }}</div>
+          <small>Active Reports</small>
+        </div>
+        <div style="background:#fff;padding:8px;border-radius:6px;border:1px solid var(--line)">
+          <div style="font-size:20px;font-weight:700">{{ stats?.matchedItems ?? 0 }}</div>
+          <small>Matched Items</small>
+        </div>
+        <div style="background:#fff;padding:8px;border-radius:6px;border:1px solid var(--line)">
+          <div style="font-size:20px;font-weight:700">{{ stats?.pendingClaims ?? 0 }}</div>
+          <small>Pending Claims</small>
+        </div>
+        <div style="background:#fff;padding:8px;border-radius:6px;border:1px solid var(--line)">
+          <div style="font-size:20px;font-weight:700">{{ stats?.returnedItemsThisMonth ?? 0 }}</div>
+          <small>Returned This Month</small>
+        </div>
+        <div style="background:#fff;padding:8px;border-radius:6px;border:1px solid var(--line)">
+          <div style="font-size:20px;font-weight:700">{{ stats?.avgTimeToMatch ?? 'N/A' }}</div>
+          <small>Avg Time to Match</small>
+        </div>
+      </div>
+
       <div class="label">MANUAL MATCH</div>
       <div class="box">
         <select class="f" [(ngModel)]="lostId"><option value="">Select a lost report</option>@for (i of lostItems; track i._id) { <option [value]="i._id">{{ i.name }} · {{ i.location }}</option> }</select>
@@ -45,11 +73,13 @@ import { Api, Item } from '../core/api';
 })
 export class ProfileComponent implements OnInit {
   auth = inject(Auth); private api = inject(Api);
+  stats: any = null;
   claims: any[] = []; queue: any[] = []; lostItems: Item[] = []; foundItems: Item[] = [];
   lostId = ''; foundId = ''; msg = ''; ok = false;
   ngOnInit() { this.refresh(); }
   refresh() {
     if (this.auth.user()?.userType !== 'admin') return;
+    this.api.stats().subscribe((s) => (this.stats = s));
     this.api.claims().subscribe((r) => (this.claims = r));
     this.api.matchQueue().subscribe((r) => (this.queue = r));
     this.api.items({ type: 'lost' }).subscribe((r) => (this.lostItems = r));

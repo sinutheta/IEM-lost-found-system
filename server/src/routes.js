@@ -242,6 +242,50 @@ const review = (status) => wrap(async (req, res) => {
 router.post('/claims/:id/approve', auth, adminOnly, review('approved'));
 router.post('/claims/:id/reject', auth, adminOnly, review('rejected'));
 
+// ---------- Admin Dashboard Statistics ----------
+router.get('/admin/stats', auth, adminOnly, wrap(async (req, res) => {
+  const [totalReports, activeReports, pendingClaims] = await Promise.all([
+    Item.countDocuments(),
+    Item.countDocuments({ status: { $in: ['open', 'Reported', 'Matched'] } }),
+    Claim.countDocuments({ status: 'pending_review' }),
+  ]);
+  const [matchedLost, matchedFound] = await Promise.all([
+    Match.distinct('lost', { status: { $in: ['suggested', 'claimed', 'resolved'] } }),
+    Match.distinct('found', { status: { $in: ['suggested', 'claimed', 'resolved'] } }),
+  ]);
+  const matchedItems = new Set([...matchedLost.map(String), ...matchedFound.map(String)]).size;
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const returnedItemsThisMonth = await Item.countDocuments({
+    status: { $in: ['returned', 'Returned'] },
+    updatedAt: { $gte: startOfMonth },
+  });
+  const sampleMatches = await Match.find({ status: { $ne: 'dismissed' } })
+    .populate('lost found', 'createdAt')
+    .sort('-createdAt')
+    .limit(200);
+  let totalDiffMs = 0, count = 0;
+  for (const m of sampleMatches) {
+    if (m.lost && m.found) {
+      const reportTime = Math.max(new Date(m.lost.createdAt).getTime(), new Date(m.found.createdAt).getTime());
+      const matchTime = new Date(m.createdAt).getTime();
+      const diff = Math.max(0, matchTime - reportTime);
+      totalDiffMs += diff;
+      count++;
+    }
+  }
+  const avgHours = count > 0 ? (totalDiffMs / count / 36e5).toFixed(1) : '0.0';
+  const avgTimeToMatch = count > 0 ? `${avgHours} hrs` : 'N/A';
+  res.json({
+    totalReports,
+    activeReports,
+    matchedItems,
+    pendingClaims,
+    returnedItemsThisMonth,
+    avgTimeToMatch,
+  });
+}));
+
 // ---------- Notifications ----------
 router.get('/notifications', auth, wrap(async (req, res) => res.json(await Notification.find({ user: req.user.id }).sort('-createdAt').limit(30))));
 router.post('/notifications/read', auth, wrap(async (req, res) => { await Notification.updateMany({ user: req.user.id }, { read: true }); res.json({ ok: true }); }));
