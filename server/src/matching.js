@@ -73,11 +73,14 @@ async function callClaude(content) {
 
 function parseAI(raw) {
   const m = String(raw).match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('AI reply contained no JSON');
+  if (!m) throw new Error('Validation error: AI reply contained no JSON');
   const j = JSON.parse(m[0]);
-  const s = Math.round(Number(j.score));
-  if (!Number.isFinite(s)) throw new Error('AI reply had no numeric score');
-  return { score: Math.max(0, Math.min(100, s)), reason: String(j.reason || '').replace(/\s+/g, ' ').slice(0, 200) };
+  if (j.score === null || j.score === undefined || j.score === '') throw new Error('Validation error: match score is missing');
+  const num = Number(j.score);
+  if (typeof num !== 'number' || isNaN(num) || !Number.isFinite(num)) throw new Error('Validation error: match score must be a number');
+  const s = Math.round(num);
+  if (s < 0 || s > 100) throw new Error(`Validation error: match score must be between 0 and 100, received ${s}`);
+  return { score: s, reason: String(j.reason || '').replace(/\s+/g, ' ').slice(0, 200) };
 }
 
 async function aiCompare(a, b) {
@@ -101,6 +104,19 @@ async function notify(user, message, kind, item) {
 }
 
 async function saveMatch(item, other, data) {
+  if (!data || data.score === null || data.score === undefined || data.score === '') {
+    throw new Error('Validation error: match score is required');
+  }
+  const num = typeof data.score === 'string' ? Number(data.score) : data.score;
+  if (typeof num !== 'number' || isNaN(num) || !Number.isFinite(num)) {
+    throw new Error('Validation error: match score must be numeric');
+  }
+  const s = Math.round(num);
+  if (s < 0 || s > 100) {
+    throw new Error(`Validation error: match score must be between 0 and 100, received ${s}`);
+  }
+  data.score = s;
+
   const [lost, found] = item.type === 'lost' ? [item, other] : [other, item];
   let m = await Match.findOne({ lost: lost._id, found: found._id });
   if (m) { // already known: refresh an untouched automatic suggestion, never resurrect a dismissed one
@@ -145,4 +161,4 @@ async function runMatching(item) {
   for (const { o, data } of results) if (data.score >= THRESHOLD()) await saveMatch(item, o, data);
 }
 
-module.exports = { runMatching, notify, score, aiCompare, parseAI, aiEnabled };
+module.exports = { runMatching, notify, score, aiCompare, parseAI, aiEnabled, saveMatch };

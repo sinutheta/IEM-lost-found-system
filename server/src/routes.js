@@ -192,9 +192,15 @@ router.post('/matches', auth, wrap(async (req, res) => {
   if (same(lost.reporter, found.reporter)) return res.status(400).json({ message: 'Both reports belong to the same person' });
   const me = await User.findById(req.user.id);
   const reason = `Linked manually by ${me.name}${admin ? ' (admin)' : ''}`;
+  let rawScore = req.body.score !== undefined ? req.body.score : 100;
+  if (typeof rawScore === 'string' && rawScore.trim() !== '') rawScore = Number(rawScore);
+  if (rawScore === null || rawScore === undefined || typeof rawScore !== 'number' || isNaN(rawScore) || !Number.isFinite(rawScore) || rawScore < 0 || rawScore > 100) {
+    return res.status(400).json({ message: 'Validation error: match score must be an integer between 0 and 100' });
+  }
+  const score = Math.round(rawScore);
   let m = await Match.findOne({ lost: lost.id, found: found.id });
   if (!m) m = new Match({ lost: lost.id, found: found.id });
-  Object.assign(m, { method: 'manual', score: 100, reason, createdBy: req.user.id, status: 'suggested' });
+  Object.assign(m, { method: 'manual', score, reason, createdBy: req.user.id, status: 'suggested' });
   await m.save();
   for (const it of [lost, found]) {
     if (it.status === 'Reported' || it.status === 'open') {

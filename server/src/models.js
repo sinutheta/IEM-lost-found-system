@@ -35,7 +35,16 @@ const Item = model('Item', new Schema({
 
 const matchSchema = new Schema({
   lost: ref('Item'), found: ref('Item'),
-  score: { type: Number, min: 0, max: 100 },
+  score: {
+    type: Number,
+    required: [true, 'Validation error: match score is required'],
+    min: [0, 'Validation error: match score cannot be less than 0'],
+    max: [100, 'Validation error: match score cannot be greater than 100'],
+    validate: {
+      validator: (v) => typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v),
+      message: 'Validation error: match score must be an integer between 0 and 100'
+    }
+  },
   keywordScore: Number,
   aiScore: Number,
   method: { type: String, enum: ['keyword','ai','manual'], default: 'keyword' },
