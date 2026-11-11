@@ -14,7 +14,7 @@ const User = model('User', new Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   passwordHash: { type: String, required: true, select: false },
-  userType: { type: String, enum: ['student','staff','admin'], default: 'student' },
+  userType: { type: String, enum: ['student','faculty','staff','admin'], default: 'student' },
   department: { type: String, default: 'Computer Science' },
 }, { timestamps: true }));
 

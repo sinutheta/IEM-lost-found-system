@@ -4,7 +4,7 @@ import { Router, CanActivateFn } from '@angular/router';
 import { tap } from 'rxjs';
 import { API_URL } from './config';
 
-export interface User { id: string; name: string; email: string; userType: 'student' | 'staff' | 'admin'; department: string; }
+export interface User { id: string; name: string; email: string; userType: 'student' | 'faculty' | 'staff' | 'admin'; department: string; }
 type AuthRes = { token: string; user: User };
 
 @Injectable({ providedIn: 'root' })

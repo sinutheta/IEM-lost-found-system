@@ -10,10 +10,16 @@ import { Auth } from '../core/auth';
     <h1>IEM LOST &amp; FOUND</h1>
     <small>Institute of Engineering &amp; Management<br>Department of Computer Science</small>
     <form (ngSubmit)="submit()" style="margin-top:24px">
-      <label>{{ reg ? 'CREATE ACCOUNT' : 'STUDENT LOGIN' }}</label>
+      <label>{{ reg ? 'CREATE ACCOUNT' : 'LOGIN' }}</label>
       @if (reg) {
         <input class="f" name="name" [(ngModel)]="name" placeholder="Full name" style="margin-bottom:10px">
         <input class="f" name="dep" [(ngModel)]="department" placeholder="Department" style="margin-bottom:10px">
+        <label>USER TYPE</label>
+        <select class="f" name="userType" [(ngModel)]="userType" style="margin-bottom:10px">
+          <option value="student">Student</option>
+          <option value="faculty">Faculty</option>
+          <option value="staff">Staff</option>
+        </select>
       }
       <label>EMAIL ID</label> 
       <input class="f" type="email" name="email" [(ngModel)]="email" placeholder="name@iem.edu.in">
@@ -30,9 +36,11 @@ import { Auth } from '../core/auth';
 })
 export class LoginComponent {
   private auth = inject(Auth); private router = inject(Router);
-  reg = false; name = ''; department = 'Computer Science'; email = ''; password = ''; err = '';
+  reg = false; name = ''; department = 'Computer Science'; userType = 'student'; email = ''; password = ''; err = '';
   submit() {
-    const req = this.reg ? this.auth.register({ name: this.name, department: this.department, email: this.email, password: this.password }) : this.auth.login(this.email, this.password);
+    const req = this.reg
+      ? this.auth.register({ name: this.name, department: this.department, userType: this.userType, email: this.email, password: this.password })
+      : this.auth.login(this.email, this.password);
     req.subscribe({ next: () => this.router.navigate(['/home']), error: (e) => (this.err = e.error?.message || 'Something went wrong') });
   }
 }

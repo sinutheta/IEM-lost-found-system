@@ -20,12 +20,14 @@ const normAns = (s) => String(s || '').trim().toLowerCase();
 
 // ---------- Auth ----------
 router.post('/auth/register', wrap(async (req, res) => {
-  const { name, email, password, department } = req.body;
+  const { name, email, password, department, userType } = req.body;
   const dom = process.env.ALLOWED_EMAIL_DOMAIN ?? 'iemcal.edu.in';
   if (!name || !email || !password || password.length < 6) return res.status(400).json({ message: 'Name, email and a 6+ character password are required' });
   if (dom && !email.toLowerCase().endsWith('@' + dom)) return res.status(400).json({ message: `Please use your @${dom} email` });
   if (await User.findOne({ email: email.toLowerCase() })) return res.status(409).json({ message: 'Email already registered' });
-  const u = await User.create({ name, email, department, passwordHash: await bcrypt.hash(password, 10) });
+  const validTypes = ['student', 'faculty', 'staff'];
+  const type = validTypes.includes(userType) ? userType : 'student';
+  const u = await User.create({ name, email, department, userType: type, passwordHash: await bcrypt.hash(password, 10) });
   res.status(201).json({ token: sign(u), user: pub(u) });
 }));
 router.post('/auth/login', wrap(async (req, res) => {
