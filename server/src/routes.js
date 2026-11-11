@@ -128,6 +128,46 @@ router.post('/items/:id/rematch', auth, wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Admin item moderation & deletion (FR-16)
+router.delete('/items/:id', auth, adminOnly, wrap(async (req, res) => {
+  const item = await Item.findById(req.params.id);
+  if (!item) return res.status(404).json({ message: 'Item not found' });
+  await Match.updateMany({ $or: [{ lost: item.id }, { found: item.id }] }, { status: 'dismissed' });
+  await Claim.updateMany({ item: item.id }, { status: 'rejected' });
+  await Item.findByIdAndDelete(req.params.id);
+  res.json({ ok: true, message: 'Report permanently removed by administrator' });
+}));
+router.post('/items/:id/moderate', auth, adminOnly, wrap(async (req, res) => {
+  const item = await Item.findById(req.params.id);
+  if (!item) return res.status(404).json({ message: 'Item not found' });
+  const { action, reason, status } = req.body;
+  if (!item.statusHistory) item.statusHistory = [];
+  if (action === 'remove') {
+    item.status = 'Cancelled';
+    item.statusHistory.push({
+      status: 'Cancelled',
+      changedAt: new Date(),
+      changedBy: req.user.id,
+      note: reason || 'Removed by admin as inappropriate'
+    });
+    await item.save();
+    await Match.updateMany({ status: 'suggested', $or: [{ lost: item.id }, { found: item.id }] }, { status: 'dismissed' });
+    return res.json({ ok: true, message: 'Report removed as inappropriate', item });
+  }
+  if (status) {
+    item.status = status;
+    item.statusHistory.push({
+      status,
+      changedAt: new Date(),
+      changedBy: req.user.id,
+      note: reason || `Status set to ${status} by admin`
+    });
+    await item.save();
+    return res.json({ ok: true, message: `Report status updated to ${status}`, item });
+  }
+  res.status(400).json({ message: 'Specify action: "remove" or status to update' });
+}));
+
 // Matches shown to the reporter (or an admin) of an item
 router.get('/items/:id/matches', auth, wrap(async (req, res) => {
   const item = await Item.findById(req.params.id);

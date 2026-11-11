@@ -28,6 +28,8 @@ export class Api {
   createItem(fd: FormData) { return this.http.post<Item>('/api/items', fd); }
   updateItem(id: string, fd: FormData) { return this.http.put<Item>(`/api/items/${id}`, fd); }
   cancel(id: string) { return this.http.post(`/api/items/${id}/cancel`, {}); }
+  deleteItem(id: string) { return this.http.delete(`/api/items/${id}`); }
+  moderateItem(id: string, action: string, reason = '', status = '') { return this.http.post(`/api/items/${id}/moderate`, { action, reason, status }); }
   question(id: string) { return this.http.get<{ question: string }>(`/api/items/${id}/question`); }
   claim(id: string, answer: string) { return this.http.post(`/api/items/${id}/claim`, { answer }); }
 

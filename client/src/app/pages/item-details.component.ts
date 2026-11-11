@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { UpperCasePipe } from '@angular/common';
 import { Api, Item, MatchRow, CATEGORIES, ago } from '../core/api';
 import { fileUrl } from '../core/config';
+import { Auth } from '../core/auth';
 
 @Component({
   standalone: true, imports: [RouterLink, FormsModule, UpperCasePipe],
@@ -45,6 +46,17 @@ import { fileUrl } from '../core/config';
       <button class="btn" style="margin-top:10px" (click)="submitClaim()">Submit Claim</button>
     }
     @if (msg) { <div [class]="ok ? 'ok' : 'err'">{{ msg }}</div> }
+
+    @if (auth.user()?.userType === 'admin') {
+      <div class="label">ADMIN MODERATION</div>
+      <div class="box" style="margin-bottom:12px;border:1px solid #c53030;background:#fff5f5">
+        <small style="color:#c53030;font-weight:700">Administrator Tools</small>
+        <div class="btns" style="margin:8px 0 0">
+          <button class="btn sm ghost" style="color:#c53030;border-color:#c53030" (click)="moderate('remove')">Mark Inappropriate</button>
+          <button class="btn sm" style="background:#c53030;border-color:#c53030" (click)="deletePermanently()">Delete Report</button>
+        </div>
+      </div>
+    }
 
     @if (item.isOwner) {
       @if (item.status === 'open' || item.status === 'Reported') {
@@ -128,6 +140,7 @@ import { fileUrl } from '../core/config';
   </div>}`,
 })
 export class ItemDetailsComponent implements OnInit {
+  auth = inject(Auth);
   private api = inject(Api); private route = inject(ActivatedRoute); private router = inject(Router);
   ago = ago; fileUrl = fileUrl;
   item: Item | null = null; matches: MatchRow[] = [];
@@ -228,6 +241,26 @@ export class ItemDetailsComponent implements OnInit {
       error: (e) => this.fail(e),
     });
   }
+  moderate(action: string) {
+    if (!confirm('Mark this report as inappropriate?')) return;
+    const reason = prompt('Reason for moderation:', 'Inappropriate content') || 'Inappropriate content';
+    this.api.moderateItem(this.item!._id, action, reason).subscribe({
+      next: () => {
+        this.succeed('Report marked as inappropriate and removed from active list.');
+        this.load();
+      },
+      error: (e) => this.fail(e),
+    });
+  }
+
+  deletePermanently() {
+    if (!confirm('Permanently delete this report? This cannot be undone.')) return;
+    this.api.deleteItem(this.item!._id).subscribe({
+      next: () => this.router.navigate(['/home']),
+      error: (e) => this.fail(e),
+    });
+  }
+
   private succeed(text: string, reload = true) { this.ok = true; this.msg = text; if (reload) this.load(); }
   private fail(e: any) { this.ok = false; this.msg = e.error?.message || 'Something went wrong'; }
 }
