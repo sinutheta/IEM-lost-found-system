@@ -13,11 +13,15 @@ export const ago = (d: string) => {
 @Injectable({ providedIn: 'root' })
 export class Api {
   private http = inject(HttpClient);
-  items(p: { type?: string; q?: string; mine?: boolean } = {}) {
+  items(p: { type?: string; q?: string; mine?: boolean; category?: string; location?: string; fromDate?: string; toDate?: string } = {}) {
     let params = new HttpParams();
     if (p.type) params = params.set('type', p.type);
     if (p.q) params = params.set('q', p.q);
     if (p.mine) params = params.set('mine', '1');
+    if (p.category) params = params.set('category', p.category);
+    if (p.location) params = params.set('location', p.location);
+    if (p.fromDate) params = params.set('fromDate', p.fromDate);
+    if (p.toDate) params = params.set('toDate', p.toDate);
     return this.http.get<Item[]>('/api/items', { params });
   }
   item(id: string) { return this.http.get<Item>(`/api/items/${id}`); }

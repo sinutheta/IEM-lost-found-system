@@ -38,9 +38,20 @@ router.get('/categories', (req, res) => res.json(CATEGORIES));
 
 // ---------- Items ----------
 router.get('/items', auth, wrap(async (req, res) => {
-  const { type, q, mine } = req.query, f = {};
+  const { type, q, mine, category, location, fromDate, toDate } = req.query, f = {};
   if (mine) f.reporter = req.user.id; else f.status = { $in: ['Reported', 'Matched', 'open'] }; // claim_pending / returned items leave the public queue
   if (type) f.type = type;
+  if (category) f.category = category;
+  if (location) f.location = new RegExp(String(location).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  if (fromDate || toDate) {
+    f.date = {};
+    if (fromDate) f.date.$gte = new Date(fromDate);
+    if (toDate) {
+      const end = new Date(toDate);
+      end.setHours(23, 59, 59, 999);
+      f.date.$lte = end;
+    }
+  }
   if (q) { const r = new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); f.$or = [{ name: r }, { location: r }, { description: r }]; }
   res.json(await Item.find(f).sort('-createdAt').populate('reporter', 'name userType department'));
 }));
@@ -151,19 +162,6 @@ router.post('/matches', auth, wrap(async (req, res) => {
       await it.save();
     }
   }
-  if (!same(lost.reporter, req.user.id)) await notify(lost.reporter, `Your lost "${lost.name}" was linked to a found "${found.name}". ${reason}. Open your item to claim it.`, 'match', lost);
-  if (!same(found.reporter, req.user.id)) await notify(found.reporter, `Your found "${found.name}" was linked to lost report "${lost.name}". ${reason}. Open your item to review.`, 'match', found);
-  res.status(201).json(m);
-}));
-  const admin = req.user.userType === 'admin';
-  if (!admin && !same(lost.reporter, req.user.id) && !same(found.reporter, req.user.id)) return res.status(403).json({ message: 'You can only link your own reports' });
-  if (same(lost.reporter, found.reporter)) return res.status(400).json({ message: 'Both reports belong to the same person' });
-  const me = await User.findById(req.user.id);
-  const reason = `Linked manually by ${me.name}${admin ? ' (admin)' : ''}`;
-  let m = await Match.findOne({ lost: lost.id, found: found.id });
-  if (!m) m = new Match({ lost: lost.id, found: found.id });
-  Object.assign(m, { method: 'manual', score: 100, reason, createdBy: req.user.id, status: 'suggested' });
-  await m.save();
   if (!same(lost.reporter, req.user.id)) await notify(lost.reporter, `Your lost "${lost.name}" was linked to a found "${found.name}". ${reason}. Open your item to claim it.`, 'match', lost);
   if (!same(found.reporter, req.user.id)) await notify(found.reporter, `Your found "${found.name}" was linked to lost report "${lost.name}". ${reason}. Open your item to review.`, 'match', found);
   res.status(201).json(m);
