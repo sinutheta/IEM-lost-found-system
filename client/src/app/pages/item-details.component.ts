@@ -2,7 +2,7 @@ import { Component, inject, OnInit } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { UpperCasePipe } from '@angular/common';
-import { Api, Item, MatchRow, ago } from '../core/api';
+import { Api, Item, MatchRow, CATEGORIES, ago } from '../core/api';
 import { fileUrl } from '../core/config';
 
 @Component({
@@ -34,11 +34,36 @@ import { fileUrl } from '../core/config';
     @if (msg) { <div [class]="ok ? 'ok' : 'err'">{{ msg }}</div> }
 
     @if (item.isOwner) {
-      @if (item.status === 'open') {
+      @if (item.status === 'open' || item.status === 'Reported') {
         <div class="btns">
+          <button class="btn ghost sm" (click)="toggleEdit()">{{ editing ? 'Close edit' : 'Edit report' }}</button>
           <button class="btn ghost sm" [disabled]="finding" (click)="rematch()">{{ finding ? 'Checking…' : 'Find matches again' }}</button>
           <button class="btn ghost sm" (click)="toggleManual()">Match manually</button>
           <button class="btn ghost sm" (click)="cancel()">Cancel report</button>
+        </div>
+      }
+
+      @if (editing) {
+        <div class="box" style="margin-bottom:10px">
+          <div class="label" style="margin-top:0">EDIT REPORT</div>
+          <label>ITEM NAME</label><input class="f" [(ngModel)]="editForm.name" placeholder="Item name">
+          <label>CATEGORY</label>
+          <select class="f" [(ngModel)]="editForm.category">
+            <option value="">Select category</option>
+            @for (c of cats; track c) { <option [value]="c">{{ c }}</option> }
+          </select>
+          <label>DESCRIPTION</label><textarea class="f" rows="3" [(ngModel)]="editForm.description" placeholder="Description"></textarea>
+          <label>LOCATION</label><input class="f" [(ngModel)]="editForm.location" placeholder="Location">
+          <label>DATE</label><input class="f" type="date" [(ngModel)]="editForm.date">
+          @if (item.type === 'found') {
+            <label>VERIFICATION QUESTION</label><input class="f" [(ngModel)]="editForm.verificationQuestion">
+            <label>NEW ANSWER (leave blank to keep current)</label><input class="f" [(ngModel)]="editForm.verificationAnswer" placeholder="New answer">
+          }
+          <label>UPDATE PHOTO</label><input type="file" accept="image/*" (change)="editPhoto = $any($event.target).files[0]">
+          <div class="btns" style="margin-top:10px">
+            <button class="btn sm" (click)="saveEdit()">Save Changes</button>
+            <button class="btn sm ghost" (click)="editing = false">Cancel</button>
+          </div>
         </div>
       }
 
@@ -97,11 +122,15 @@ export class ItemDetailsComponent implements OnInit {
   claimingId = ''; claimQuestion = ''; claimAnswer = ''; claimNote = '';              // claim from a match
   finding = false;
   manualOpen = false; manualQ = ''; manualResults: Item[] = [];
+  cats = CATEGORIES;
+  editing = false;
+  editPhoto: File | null = null;
+  editForm: any = {};
 
   ngOnInit() { this.route.paramMap.subscribe(() => this.load()); }
   load() {
     const id = this.route.snapshot.paramMap.get('id')!;
-    this.question = ''; this.claimingId = ''; this.manualOpen = false;
+    this.question = ''; this.claimingId = ''; this.manualOpen = false; this.editing = false;
     this.api.item(id).subscribe((i) => { this.item = i; if (i.isOwner) this.loadMatches(); else this.matches = []; });
   }
   loadMatches() { this.api.matches(this.item!._id).subscribe((m) => (this.matches = m)); }
@@ -156,6 +185,36 @@ export class ItemDetailsComponent implements OnInit {
   }
 
   cancel() { this.api.cancel(this.item!._id).subscribe(() => this.router.navigate(['/my-items'])); }
+
+  toggleEdit() {
+    this.editing = !this.editing;
+    if (this.editing && this.item) {
+      this.editPhoto = null;
+      this.editForm = {
+        name: this.item.name || '',
+        category: this.item.category || '',
+        description: this.item.description || '',
+        location: this.item.location || '',
+        date: this.item.date ? new Date(this.item.date).toISOString().slice(0, 10) : '',
+        verificationQuestion: (this.item as any).verificationQuestion || '',
+        verificationAnswer: '',
+      };
+    }
+  }
+
+  saveEdit() {
+    if (!this.item) return;
+    const fd = new FormData();
+    Object.entries(this.editForm).forEach(([k, v]) => v && fd.append(k, v as string));
+    if (this.editPhoto) fd.append('photo', this.editPhoto);
+    this.api.updateItem(this.item._id, fd).subscribe({
+      next: (updated) => {
+        this.editing = false;
+        this.succeed('Report updated successfully!');
+      },
+      error: (e) => this.fail(e),
+    });
+  }
   private succeed(text: string, reload = true) { this.ok = true; this.msg = text; if (reload) this.load(); }
   private fail(e: any) { this.ok = false; this.msg = e.error?.message || 'Something went wrong'; }
 }

@@ -64,6 +64,27 @@ router.post('/items', auth, upload.single('photo'), wrap(async (req, res) => {
   // matching (keyword or AI) runs in the background so the reporter is not kept waiting
   runMatching(item).catch((e) => console.error('[matching] failed:', e.message));
 }));
+router.put('/items/:id', auth, upload.single('photo'), wrap(async (req, res) => {
+  const item = await Item.findById(req.params.id);
+  if (!item) return res.status(404).json({ message: 'Item not found' });
+  if (!same(item.reporter, req.user.id)) return res.status(403).json({ message: 'Only the original reporter can edit this item' });
+  if (item.status !== 'open' && item.status !== 'Reported') return res.status(400).json({ message: 'Only active/open reports can be edited' });
+  const b = req.body;
+  if (b.name) item.name = b.name.trim();
+  if (b.category) item.category = b.category;
+  if (b.description !== undefined) item.description = b.description;
+  if (b.location) item.location = b.location;
+  if (b.date) item.date = b.date;
+  if (req.file) item.photo = '/uploads/' + req.file.filename;
+  if (item.type === 'found') {
+    if (b.verificationQuestion) item.verificationQuestion = b.verificationQuestion;
+    if (b.verificationAnswer) item.verificationAnswerHash = await bcrypt.hash(normAns(b.verificationAnswer), 8);
+  }
+  await item.save();
+  const out = item.toObject(); delete out.verificationAnswerHash;
+  res.json(out);
+  runMatching(item).catch((e) => console.error('[matching] failed:', e.message));
+}));
 router.post('/items/:id/cancel', auth, wrap(async (req, res) => {
   const item = await Item.findOne({ _id: req.params.id, reporter: req.user.id, status: 'open' });
   if (!item) return res.status(404).json({ message: 'Cannot cancel this item' });

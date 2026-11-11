@@ -21,6 +21,7 @@ export class Api {
   }
   item(id: string) { return this.http.get<Item>(`/api/items/${id}`); }
   createItem(fd: FormData) { return this.http.post<Item>('/api/items', fd); }
+  updateItem(id: string, fd: FormData) { return this.http.put<Item>(`/api/items/${id}`, fd); }
   cancel(id: string) { return this.http.post(`/api/items/${id}/cancel`, {}); }
   question(id: string) { return this.http.get<{ question: string }>(`/api/items/${id}/question`); }
   claim(id: string, answer: string) { return this.http.post(`/api/items/${id}/claim`, { answer }); }
