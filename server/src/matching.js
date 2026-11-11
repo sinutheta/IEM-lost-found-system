@@ -110,6 +110,14 @@ async function saveMatch(item, other, data) {
   try { m = await Match.create({ lost: lost._id, found: found._id, ...data }); }
   catch (e) { if (e.code === 11000) return null; throw e; } // two runs raced; the other one wins
   const pct = data.score;
+  for (const it of [lost, found]) {
+    if (it.status === 'Reported' || it.status === 'open') {
+      it.status = 'Matched';
+      if (!it.statusHistory) it.statusHistory = [];
+      it.statusHistory.push({ status: 'Matched', changedAt: new Date(), note: `Match identified with score ${pct}%` });
+      await it.save();
+    }
+  }
   await notify(lost.reporter, `Possible match (${pct}%) for your lost "${lost.name}": a found "${found.name}" was reported. Open your item to claim it.`, 'match', lost);
   await notify(found.reporter, `Your found "${found.name}" may belong to a lost report "${lost.name}" (${pct}%). Open your item to review.`, 'match', found);
   return m;
@@ -117,7 +125,7 @@ async function saveMatch(item, other, data) {
 
 async function runMatching(item) {
   const opposite = item.type === 'lost' ? 'found' : 'lost';
-  const others = await Item.find({ type: opposite, status: 'open', _id: { $ne: item._id } }).limit(500);
+  const others = await Item.find({ type: opposite, status: { $in: ['Reported', 'Matched', 'open'] }, _id: { $ne: item._id } }).limit(500);
   const ranked = others.map((o) => ({ o, kw: score(item, o) })).sort((x, y) => y.kw - x.kw);
   const ai = aiEnabled();
   // AI mode: the keyword score only shortlists candidates. Keyword mode: it decides on its own.

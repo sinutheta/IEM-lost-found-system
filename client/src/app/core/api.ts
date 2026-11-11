@@ -1,7 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 
-export interface Item { _id: string; type: 'lost' | 'found'; name: string; category: string; description?: string; location: string; date: string; photo?: string; status: string; createdAt: string; reporter: any; isOwner?: boolean; }
+export interface StatusHistoryEntry { status: string; changedAt: string; note?: string; changedBy?: any; }
+export interface Item { _id: string; type: 'lost' | 'found'; name: string; category: string; description?: string; location: string; date: string; photo?: string; status: string; statusHistory?: StatusHistoryEntry[]; createdAt: string; reporter: any; isOwner?: boolean; }
 export interface MatchRow { _id: string; score: number; method: 'keyword' | 'ai' | 'manual'; reason?: string; photos?: number; status: string; side: 'owner' | 'finder'; other: any; }
 export const CATEGORIES = ['Wallet', 'ID Card', 'Electronics', 'Bottle', 'Books & Stationery', 'Keys', 'Bag', 'Clothing', 'Other'];
 export const ago = (d: string) => {

@@ -1,6 +1,14 @@
 const { Schema, model } = require('mongoose');
 const ref = (m) => ({ type: Schema.Types.ObjectId, ref: m });
 const CATEGORIES = ['Wallet','ID Card','Electronics','Bottle','Books & Stationery','Keys','Bag','Clothing','Other'];
+const ITEM_STATUSES = ['Reported', 'Matched', 'Pending Verification', 'Returned', 'Cancelled', 'Rejected', 'open', 'claim_pending', 'returned', 'cancelled'];
+
+const statusHistorySchema = new Schema({
+  status: { type: String, required: true },
+  changedAt: { type: Date, default: Date.now },
+  changedBy: ref('User'),
+  note: String,
+}, { _id: false });
 
 const User = model('User', new Schema({
   name: { type: String, required: true, trim: true },
@@ -18,9 +26,8 @@ const Item = model('Item', new Schema({
   location: { type: String, required: true },
   date: { type: Date, default: Date.now },
   photo: String,
-  // open = in the queue / visible & matchable, claim_pending = removed from the queue while an admin reviews,
-  // returned = handed back, cancelled = withdrawn by the reporter
-  status: { type: String, enum: ['open','claim_pending','returned','cancelled'], default: 'open' },
+  status: { type: String, enum: ITEM_STATUSES, default: 'Reported' },
+  statusHistory: [statusHistorySchema],
   reporter: ref('User'),
   verificationQuestion: String,
   verificationAnswerHash: { type: String, select: false },
@@ -65,4 +72,4 @@ const Notification = model('Notification', new Schema({
   read: { type: Boolean, default: false },
 }, { timestamps: true }));
 
-module.exports = { User, Item, Match, Claim, ClaimLock, Notification, CATEGORIES };
+module.exports = { User, Item, Match, Claim, ClaimLock, Notification, CATEGORIES, ITEM_STATUSES };

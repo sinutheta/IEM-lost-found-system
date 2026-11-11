@@ -13,7 +13,7 @@ import { Api, Item, ago } from '../core/api';
     <div class="label">MY REPORTS</div>
     @for (i of items; track i._id) {
       <a class="row" [routerLink]="['/item', i._id]">
-        <div class="grow"><b>{{ i.name }}</b><small>{{ i.type | uppercase }} · {{ i.location }} · {{ i.status.replace('_', ' ') }}</small></div>
+        <div class="grow"><b>{{ i.name }}</b><small>{{ i.type | uppercase }} · {{ i.location }} · {{ i.status }}</small></div>
       </a>
     } @empty { <p class="muted">You haven't reported anything yet.</p> }
   </div>`,

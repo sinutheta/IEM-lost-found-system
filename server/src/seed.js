@@ -20,7 +20,14 @@ const day = (n) => new Date(Date.now() - n * 864e5);
     { type: 'lost', name: 'USB Pen Drive', category: 'Electronics', description: 'Black 32GB pen drive', location: 'CSE Dept., Block B', date: day(3), reporter: student._id },
     { type: 'found', name: 'Blue Water Bottle', category: 'Bottle', description: 'Blue bottle with a cat sticker', location: 'College Canteen', date: day(0), reporter: desk._id, verificationQuestion: 'What sticker is on the bottle?', verificationAnswerHash: ans('cat') },
   ];
-  for (const i of items) { const it = await Item.create(i); await runMatching(it); }
+  for (const i of items) {
+    const it = await Item.create({
+      ...i,
+      status: 'Reported',
+      statusHistory: [{ status: 'Reported', changedAt: i.date || new Date(), note: 'Initial seeded report' }],
+    });
+    await runMatching(it);
+  }
   console.log('Seeded. Logins (password123): admin@iem.edu.in, student@iem.edu.in, security@iem.edu.in');
   process.exit(0);
 })();

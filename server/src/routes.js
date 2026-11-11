@@ -39,7 +39,7 @@ router.get('/categories', (req, res) => res.json(CATEGORIES));
 // ---------- Items ----------
 router.get('/items', auth, wrap(async (req, res) => {
   const { type, q, mine } = req.query, f = {};
-  if (mine) f.reporter = req.user.id; else f.status = 'open'; // claim_pending / returned items leave the public queue
+  if (mine) f.reporter = req.user.id; else f.status = { $in: ['Reported', 'Matched', 'open'] }; // claim_pending / returned items leave the public queue
   if (type) f.type = type;
   if (q) { const r = new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); f.$or = [{ name: r }, { location: r }, { description: r }]; }
   res.json(await Item.find(f).sort('-createdAt').populate('reporter', 'name userType department'));
@@ -52,7 +52,18 @@ router.get('/items/:id', auth, wrap(async (req, res) => {
 router.post('/items', auth, upload.single('photo'), wrap(async (req, res) => {
   const b = req.body;
   if (!['lost', 'found'].includes(b.type) || !b.name || !b.location) return res.status(400).json({ message: 'Type, item name and location are required' });
-  const doc = { type: b.type, name: b.name, category: b.category || 'Other', description: b.description, location: b.location, date: b.date || Date.now(), reporter: req.user.id, photo: req.file ? '/uploads/' + req.file.filename : undefined };
+  const doc = {
+    type: b.type,
+    name: b.name,
+    category: b.category || 'Other',
+    description: b.description,
+    location: b.location,
+    date: b.date || Date.now(),
+    reporter: req.user.id,
+    photo: req.file ? '/uploads/' + req.file.filename : undefined,
+    status: 'Reported',
+    statusHistory: [{ status: 'Reported', changedAt: new Date(), changedBy: req.user.id, note: 'Initial report submitted' }],
+  };
   if (b.type === 'found') {
     if (!b.verificationQuestion || !b.verificationAnswer) return res.status(400).json({ message: 'Found items need a verification question and answer' });
     doc.verificationQuestion = b.verificationQuestion;
@@ -68,7 +79,7 @@ router.put('/items/:id', auth, upload.single('photo'), wrap(async (req, res) => 
   const item = await Item.findById(req.params.id);
   if (!item) return res.status(404).json({ message: 'Item not found' });
   if (!same(item.reporter, req.user.id)) return res.status(403).json({ message: 'Only the original reporter can edit this item' });
-  if (item.status !== 'open' && item.status !== 'Reported') return res.status(400).json({ message: 'Only active/open reports can be edited' });
+  if (!['Reported', 'Matched', 'open'].includes(item.status)) return res.status(400).json({ message: 'Only active/open reports can be edited' });
   const b = req.body;
   if (b.name) item.name = b.name.trim();
   if (b.category) item.category = b.category;
@@ -80,20 +91,25 @@ router.put('/items/:id', auth, upload.single('photo'), wrap(async (req, res) => 
     if (b.verificationQuestion) item.verificationQuestion = b.verificationQuestion;
     if (b.verificationAnswer) item.verificationAnswerHash = await bcrypt.hash(normAns(b.verificationAnswer), 8);
   }
+  if (!item.statusHistory) item.statusHistory = [];
+  item.statusHistory.push({ status: item.status, changedAt: new Date(), changedBy: req.user.id, note: 'Report details edited' });
   await item.save();
   const out = item.toObject(); delete out.verificationAnswerHash;
   res.json(out);
   runMatching(item).catch((e) => console.error('[matching] failed:', e.message));
 }));
 router.post('/items/:id/cancel', auth, wrap(async (req, res) => {
-  const item = await Item.findOne({ _id: req.params.id, reporter: req.user.id, status: 'open' });
+  const item = await Item.findOne({ _id: req.params.id, reporter: req.user.id, status: { $in: ['Reported', 'Matched', 'open'] } });
   if (!item) return res.status(404).json({ message: 'Cannot cancel this item' });
-  item.status = 'cancelled'; await item.save();
+  item.status = 'Cancelled';
+  if (!item.statusHistory) item.statusHistory = [];
+  item.statusHistory.push({ status: 'Cancelled', changedAt: new Date(), changedBy: req.user.id, note: 'Cancelled by reporter' });
+  await item.save();
   await Match.updateMany({ status: 'suggested', $or: [{ lost: item.id }, { found: item.id }] }, { status: 'dismissed' });
   res.json(item);
 }));
 router.post('/items/:id/rematch', auth, wrap(async (req, res) => {
-  const item = await Item.findOne({ _id: req.params.id, reporter: req.user.id, status: 'open' });
+  const item = await Item.findOne({ _id: req.params.id, reporter: req.user.id, status: { $in: ['Reported', 'Matched', 'open'] } });
   if (!item) return res.status(404).json({ message: 'Only your open reports can be re-checked' });
   await runMatching(item);
   res.json({ ok: true });
@@ -109,7 +125,7 @@ router.get('/items/:id/matches', auth, wrap(async (req, res) => {
   const rows = ms.map((m) => ({
     _id: m.id, score: m.score, method: m.method, reason: m.reason, photos: m.photos, status: m.status,
     side: item.type === 'lost' ? 'owner' : 'finder', other: item.type === 'lost' ? m.found : m.lost,
-  })).filter((r) => r.other && (r.status === 'claimed' || r.other.status === 'open'));
+  })).filter((r) => r.other && (r.status === 'claimed' || ['Reported', 'Matched', 'open'].includes(r.other.status)));
   res.json(rows);
 }));
 
@@ -117,7 +133,28 @@ router.get('/items/:id/matches', auth, wrap(async (req, res) => {
 router.post('/matches', auth, wrap(async (req, res) => {
   const [lost, found] = await Promise.all([Item.findById(req.body.lostId), Item.findById(req.body.foundId)]);
   if (!lost || !found || lost.type !== 'lost' || found.type !== 'found') return res.status(400).json({ message: 'Pick one lost report and one found item' });
-  if (lost.status !== 'open' || found.status !== 'open') return res.status(409).json({ message: 'Both items must still be open' });
+  if (!['Reported', 'Matched', 'open'].includes(lost.status) || !['Reported', 'Matched', 'open'].includes(found.status)) return res.status(409).json({ message: 'Both items must still be open' });
+  const admin = req.user.userType === 'admin';
+  if (!admin && !same(lost.reporter, req.user.id) && !same(found.reporter, req.user.id)) return res.status(403).json({ message: 'You can only link your own reports' });
+  if (same(lost.reporter, found.reporter)) return res.status(400).json({ message: 'Both reports belong to the same person' });
+  const me = await User.findById(req.user.id);
+  const reason = `Linked manually by ${me.name}${admin ? ' (admin)' : ''}`;
+  let m = await Match.findOne({ lost: lost.id, found: found.id });
+  if (!m) m = new Match({ lost: lost.id, found: found.id });
+  Object.assign(m, { method: 'manual', score: 100, reason, createdBy: req.user.id, status: 'suggested' });
+  await m.save();
+  for (const it of [lost, found]) {
+    if (it.status === 'Reported' || it.status === 'open') {
+      it.status = 'Matched';
+      if (!it.statusHistory) it.statusHistory = [];
+      it.statusHistory.push({ status: 'Matched', changedAt: new Date(), changedBy: req.user.id, note: reason });
+      await it.save();
+    }
+  }
+  if (!same(lost.reporter, req.user.id)) await notify(lost.reporter, `Your lost "${lost.name}" was linked to a found "${found.name}". ${reason}. Open your item to claim it.`, 'match', lost);
+  if (!same(found.reporter, req.user.id)) await notify(found.reporter, `Your found "${found.name}" was linked to lost report "${lost.name}". ${reason}. Open your item to review.`, 'match', found);
+  res.status(201).json(m);
+}));
   const admin = req.user.userType === 'admin';
   if (!admin && !same(lost.reporter, req.user.id) && !same(found.reporter, req.user.id)) return res.status(403).json({ message: 'You can only link your own reports' });
   if (same(lost.reporter, found.reporter)) return res.status(400).json({ message: 'Both reports belong to the same person' });
@@ -174,11 +211,26 @@ const resetFailedAttempts = async (user, item) => {
 
 // Takes the found item (and its matched lost report) out of the queue and opens the claim for admin review
 async function openClaim({ found, lost, match, claimant, answer, side, note }) {
-  const locked = await Item.findOneAndUpdate({ _id: found._id, status: 'open' }, { status: 'claim_pending' });
+  const locked = await Item.findOneAndUpdate(
+    { _id: found._id, status: { $in: ['Reported', 'Matched', 'open'] } },
+    {
+      status: 'Pending Verification',
+      $push: { statusHistory: { status: 'Pending Verification', changedAt: new Date(), changedBy: idOf(claimant), note: `Claim submitted by ${side === 'finder' ? 'finder' : 'owner'}` } }
+    },
+    { new: true }
+  );
   if (!locked) return null; // someone else claimed it first
-  if (lost) await Item.updateOne({ _id: idOf(lost), status: 'open' }, { status: 'claim_pending' });
+  if (lost) {
+    await Item.updateOne(
+      { _id: idOf(lost), status: { $in: ['Reported', 'Matched', 'open'] } },
+      {
+        status: 'Pending Verification',
+        $push: { statusHistory: { status: 'Pending Verification', changedAt: new Date(), changedBy: idOf(claimant), note: 'Linked to pending claim' } }
+      }
+    );
+  }
   if (match) { match.status = 'claimed'; await match.save(); }
-  const claim = await Claim.create({ item: found._id, match: match?._id, claimant, answer, side, note });
+  const claim = await Claim.create({ item: found._id, match: match?._id, claimant, answer, side, note, failedAttempts: 0 });
   for (const a of await User.find({ userType: 'admin' })) {
     await notify(a, `New ${side === 'finder' ? 'hand-over' : 'ownership'} claim on "${found.name}" awaiting review`, 'claim', found);
   }
@@ -187,7 +239,7 @@ async function openClaim({ found, lost, match, claimant, answer, side, note }) {
 
 router.get('/items/:id/question', auth, wrap(async (req, res) => {
   const item = await Item.findById(req.params.id);
-  if (!item || item.type !== 'found' || item.status !== 'open') return res.status(404).json({ message: 'This item cannot be claimed' });
+  if (!item || item.type !== 'found' || !['Reported', 'Matched', 'open'].includes(item.status)) return res.status(404).json({ message: 'This item cannot be claimed' });
   const lock = await lockOf(req.user.id, item.id);
   if (lock) return res.status(423).json({ message: 'Too many wrong attempts. Try again later.', until: lock.until });
   res.json({ question: item.verificationQuestion });
@@ -197,7 +249,7 @@ router.get('/items/:id/question', auth, wrap(async (req, res) => {
 router.post('/items/:id/claim', auth, wrap(async (req, res) => {
   const item = await Item.findById(req.params.id).select('+verificationAnswerHash');
   if (!item || item.type !== 'found') return res.status(404).json({ message: 'Found item not found' });
-  if (item.status !== 'open') return res.status(409).json({ message: 'This item is not available to claim' });
+  if (!['Reported', 'Matched', 'open'].includes(item.status)) return res.status(409).json({ message: 'This item is not available to claim' });
   if (same(item.reporter, req.user.id)) return res.status(400).json({ message: 'You reported this item' });
   const lock = await lockOf(req.user.id, item.id);
   if (lock) return res.status(423).json({ message: 'Claim is locked due to 3 consecutive wrong attempts. Try again later.', until: lock.until });
@@ -209,7 +261,7 @@ router.post('/items/:id/claim', auth, wrap(async (req, res) => {
     return res.status(403).json({ message: `Incorrect answer. ${outcome.remaining} attempt(s) remaining before a 30-minute lockout.`, failedAttempts: outcome.failedAttempts, remaining: outcome.remaining });
   }
   await resetFailedAttempts(req.user.id, item.id);
-  const mine = await Item.find({ reporter: req.user.id, type: 'lost', status: 'open' }).distinct('_id');
+  const mine = await Item.find({ reporter: req.user.id, type: 'lost', status: { $in: ['Reported', 'Matched', 'open'] } }).distinct('_id');
   const match = await Match.findOne({ found: item.id, lost: { $in: mine }, status: 'suggested' });
   const claim = await openClaim({ found: item, lost: match?.lost, match, claimant: req.user.id, answer: req.body.answer, side: 'owner' });
   if (!claim) return res.status(409).json({ message: 'This item is no longer available to claim' });
@@ -222,7 +274,7 @@ router.post('/matches/:id/claim', auth, wrap(async (req, res) => {
   if (!m || m.status !== 'suggested') return res.status(409).json({ message: 'This match is not available to claim' });
   const lost = await Item.findById(m.lost);
   const found = await Item.findById(m.found).select('+verificationAnswerHash');
-  if (!lost || !found || lost.status !== 'open' || found.status !== 'open') return res.status(409).json({ message: 'One of the items is no longer in the queue' });
+  if (!lost || !found || !['Reported', 'Matched', 'open'].includes(lost.status) || !['Reported', 'Matched', 'open'].includes(found.status)) return res.status(409).json({ message: 'One of the items is no longer in the queue' });
   const isOwner = same(lost.reporter, req.user.id), isFinder = same(found.reporter, req.user.id);
   if (isOwner === isFinder) return res.status(isOwner ? 400 : 403).json({ message: isOwner ? 'Both reports are yours' : 'Only the two reporters can claim this match' });
   if (isOwner) {
@@ -252,10 +304,20 @@ const review = (status) => wrap(async (req, res) => {
   if (!c || c.status !== 'pending_review') return res.status(404).json({ message: 'No pending claim found' });
   Object.assign(c, { status, reviewedBy: req.user.id, reviewedAt: new Date() }); await c.save();
   const approved = status === 'approved';
-  c.item.status = approved ? 'returned' : 'open'; await c.item.save();
+  const newStatus = approved ? 'Returned' : 'Rejected';
+  c.item.status = newStatus;
+  if (!c.item.statusHistory) c.item.statusHistory = [];
+  c.item.statusHistory.push({ status: newStatus, changedAt: new Date(), changedBy: req.user.id, note: `Claim ${status} by admin` });
+  await c.item.save();
   const m = c.match ? await Match.findById(c.match) : null;
   if (m) {
-    await Item.updateOne({ _id: m.lost, status: 'claim_pending' }, { status: approved ? 'returned' : 'open' });
+    await Item.updateOne(
+      { _id: m.lost },
+      {
+        status: newStatus,
+        $push: { statusHistory: { status: newStatus, changedAt: new Date(), changedBy: req.user.id, note: `Claim ${status} by admin` } }
+      }
+    );
     m.status = approved ? 'resolved' : 'dismissed'; await m.save();
     if (approved) { // both items are gone from the queue, so every other suggestion involving them is void
       await Match.updateMany({ _id: { $ne: m._id }, status: { $in: ['suggested', 'claimed'] }, $or: [{ lost: m.lost }, { found: m.found }] }, { status: 'dismissed' });

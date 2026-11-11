@@ -13,15 +13,28 @@ import { fileUrl } from '../core/config';
   <div class="pad">
     <div class="photo">@if (item.photo) { <img [src]="fileUrl(item.photo)"> } @else { ITEM PHOTO }</div>
     <div class="title"><h3>{{ item.name }}</h3><span class="badge">{{ item.type | uppercase }}</span></div>
-    <small>Reported {{ ago(item.createdAt) }} · {{ item.location }} · Status: {{ item.status.replace('_', ' ') }}</small>
+    <small>Reported {{ ago(item.createdAt) }} · {{ item.location }} · Status: <span class="badge" style="padding:1px 6px">{{ item.status }}</span></small>
     <div class="label">DESCRIPTION</div><div class="box">{{ item.description || 'No description provided.' }}</div>
     <div class="label">REPORTED BY</div>
     <div class="box who"><div class="avatar"></div><div><b>{{ item.reporter.name }}</b><small>{{ item.reporter.userType }} · {{ item.reporter.department }}</small></div></div>
 
+    @if (item.statusHistory && item.statusHistory.length > 0) {
+      <div class="label">STATUS HISTORY</div>
+      <div class="box" style="font-size:12px;line-height:1.4">
+        @for (h of item.statusHistory; track $index) {
+          <div style="padding:4px 0;border-bottom:1px solid var(--line)">
+            <span class="badge" style="padding:1px 6px;margin-right:6px">{{ h.status }}</span>
+            <small>{{ ago(h.changedAt) }}</small>
+            @if (h.note) { <div class="muted">{{ h.note }}</div> }
+          </div>
+        }
+      </div>
+    }
+
     @if (!item.isOwner) {
       <div class="btns">
         <a class="btn ghost" [href]="'mailto:' + item.reporter.email">Contact Reporter</a>
-        @if (item.type === 'found' && item.status === 'open') { <button class="btn" (click)="openClaim()">Claim This Item</button> }
+        @if (item.type === 'found' && (item.status === 'Reported' || item.status === 'Matched' || item.status === 'open')) { <button class="btn" (click)="openClaim()">Claim This Item</button> }
       </div>
     }
 
@@ -89,7 +102,7 @@ import { fileUrl } from '../core/config';
 
           @if (m.status === 'claimed') {
             <small class="ok">Claim submitted. Both items are out of the queue while an admin reviews.</small>
-          } @else if (item.status === 'open') {
+          } @else if (item.status === 'Reported' || item.status === 'Matched' || item.status === 'open') {
             @if (claimingId === m._id) {
               @if (m.side === 'owner') {
                 <div class="label">VERIFICATION QUESTION</div>
