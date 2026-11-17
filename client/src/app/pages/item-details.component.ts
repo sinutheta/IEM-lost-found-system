@@ -19,6 +19,31 @@ import { Auth } from '../core/auth';
     <div class="label">REPORTED BY</div>
     <div class="box who"><div class="avatar"></div><div><b>{{ item.reporter.name }}</b><small>{{ item.reporter.userType }} · {{ item.reporter.department }}</small></div></div>
 
+    @if (item.photo) {
+      <div class="label" style="display:flex;justify-content:space-between;align-items:center">
+        <span>🤖 AI VISUAL INSPECTION</span>
+        <button class="link" style="font-size:11px" [disabled]="aiScanning" (click)="scanWithAi()">
+          {{ aiScanning ? 'Scanning…' : 'Re-scan with AI' }}
+        </button>
+      </div>
+      <div class="box" style="background:#f8f4ff;border:1px solid #d6bcfa">
+        @if (item.aiVisualDescription) {
+          <div style="font-size:13px;line-height:1.4;margin-bottom:6px">{{ item.aiVisualDescription }}</div>
+        } @else {
+          <div style="font-size:13px;color:#6b46c1;margin-bottom:6px">Photo ready for AI visual analysis.</div>
+        }
+        @if (item.aiVisualTags && item.aiVisualTags.length > 0) {
+          <div style="display:flex;flex-wrap:wrap;gap:4px">
+            @for (t of item.aiVisualTags; track t) {
+              <span style="display:inline-block;padding:2px 8px;border-radius:12px;background:#e9d8fd;color:#553c9a;font-size:11px;font-weight:600">
+                #{{ t }}
+              </span>
+            }
+          </div>
+        }
+      </div>
+    }
+
     @if (item.statusHistory && item.statusHistory.length > 0) {
       <div class="label">STATUS HISTORY</div>
       <div class="box" style="font-size:12px;line-height:1.4">
@@ -107,8 +132,16 @@ import { Auth } from '../core/auth';
         <div class="box match">
           <a class="row" [routerLink]="['/item', m.other._id]">
             <div class="thumb">@if (m.other.photo) { <img [src]="fileUrl(m.other.photo)"> } @else { IMG }</div>
-            <div class="grow"><b>{{ m.other.name }}</b><small>{{ m.other.type === 'found' ? 'Found' : 'Lost' }} · {{ m.other.location }}</small></div>
-            <span class="badge">{{ m.score }}%</span>
+            <div class="grow">
+              <div style="display:flex;align-items:center;gap:6px">
+                <b>{{ m.other.name }}</b>
+                @if (m.method === 'ai') {
+                  <span style="background:#553c9a;color:#fff;font-size:9px;padding:1px 5px;border-radius:4px;font-weight:700">AI MATCH</span>
+                }
+              </div>
+              <small>{{ m.other.type === 'found' ? 'Found' : 'Lost' }} · {{ m.other.location }}</small>
+            </div>
+            <span class="badge" [style.borderColor]="m.method === 'ai' ? '#553c9a' : ''">{{ m.score }}%</span>
           </a>
           <small class="why">{{ why(m) }}</small>
 
@@ -152,6 +185,26 @@ export class ItemDetailsComponent implements OnInit {
   editing = false;
   editPhoto: File | null = null;
   editForm: any = {};
+  aiScanning = false;
+
+  scanWithAi() {
+    if (!this.item) return;
+    this.aiScanning = true;
+    this.api.aiScan(this.item._id).subscribe({
+      next: (res) => {
+        this.aiScanning = false;
+        if (res.item) Object.assign(this.item, res.item);
+        this.msg = res.message;
+        this.ok = true;
+        this.loadMatches();
+      },
+      error: (e) => {
+        this.aiScanning = false;
+        this.msg = e.error?.message || 'AI scan failed';
+        this.ok = false;
+      }
+    });
+  }
 
   ngOnInit() { this.route.paramMap.subscribe(() => this.load()); }
   load() {

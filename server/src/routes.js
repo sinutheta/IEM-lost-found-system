@@ -2,7 +2,7 @@ const router = require('express').Router();
 const bcrypt = require('bcryptjs'), jwt = require('jsonwebtoken'), multer = require('multer'), path = require('path');
 const { User, Item, Match, Claim, ClaimLock, Notification, CATEGORIES } = require('./models');
 const { auth, adminOnly } = require('./middleware');
-const { runMatching, notify } = require('./matching');
+const { runMatching, notify, scanAllWithAI, getAiEngineInfo, analyzeItemImage } = require('./matching');
 
 const LOCK_MIN = +process.env.CLAIM_LOCK_MINUTES || 30;
 const EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp' };
@@ -420,6 +420,142 @@ router.get('/admin/stats', auth, adminOnly, wrap(async (req, res) => {
     returnedItemsThisMonth,
     avgTimeToMatch,
   });
+}));
+
+// ---------- Item AI Scan Endpoint ----------
+router.post('/items/:id/ai-scan', auth, wrap(async (req, res) => {
+  const item = await Item.findById(req.params.id);
+  if (!item) return res.status(404).json({ message: 'Item not found' });
+  let analysis = null;
+  if (item.photo) {
+    analysis = await analyzeItemImage(item);
+    if (analysis) {
+      Object.assign(item, analysis);
+      item.aiProcessedAt = new Date();
+      await item.save();
+    }
+  }
+  const matches = await runMatching(item);
+  res.json({
+    ok: true,
+    message: analysis ? 'AI photo analysis complete and matches updated.' : 'AI matching run complete.',
+    item,
+    matchesCount: matches ? matches.length : 0
+  });
+}));
+
+// ---------- Comprehensive Admin Database Management Endpoints ----------
+router.get('/admin/engine', auth, adminOnly, wrap(async (req, res) => {
+  res.json(getAiEngineInfo());
+}));
+
+router.post('/admin/ai/scan-all', auth, adminOnly, wrap(async (req, res) => {
+  const result = await scanAllWithAI();
+  res.json({
+    ok: true,
+    message: `AI visual scan complete: scanned ${result.scannedItems} active items and produced ${result.totalMatches} matches.`,
+    ...result
+  });
+}));
+
+router.get('/admin/items', auth, adminOnly, wrap(async (req, res) => {
+  const { type, status, category, q } = req.query;
+  const f = {};
+  if (type) f.type = type;
+  if (status) f.status = status;
+  if (category) f.category = category;
+  if (q) {
+    const r = new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    f.$or = [{ name: r }, { location: r }, { description: r }];
+  }
+  const items = await Item.find(f)
+    .sort('-createdAt')
+    .populate('reporter', 'name email userType department')
+    .limit(300);
+  const total = await Item.countDocuments(f);
+  res.json({ total, items });
+}));
+
+router.put('/admin/items/:id/status', auth, adminOnly, wrap(async (req, res) => {
+  const { status, note } = req.body;
+  const item = await Item.findById(req.params.id);
+  if (!item) return res.status(404).json({ message: 'Item not found' });
+  const oldStatus = item.status;
+  item.status = status;
+  if (!item.statusHistory) item.statusHistory = [];
+  item.statusHistory.push({
+    status,
+    changedAt: new Date(),
+    changedBy: req.user.id,
+    note: note || `Status changed from ${oldStatus} to ${status} by Administrator`
+  });
+  await item.save();
+  res.json({ ok: true, item });
+}));
+
+router.get('/admin/users', auth, adminOnly, wrap(async (req, res) => {
+  const { q, userType } = req.query;
+  const f = {};
+  if (userType) f.userType = userType;
+  if (q) {
+    const r = new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    f.$or = [{ name: r }, { email: r }, { department: r }];
+  }
+  const users = await User.find(f).sort('-createdAt').limit(200);
+  const userStats = await Promise.all(users.map(async (u) => {
+    const [reportCount, claimCount] = await Promise.all([
+      Item.countDocuments({ reporter: u._id }),
+      Claim.countDocuments({ claimant: u._id })
+    ]);
+    return {
+      _id: u._id,
+      name: u.name,
+      email: u.email,
+      userType: u.userType,
+      department: u.department,
+      createdAt: u.createdAt,
+      reportCount,
+      claimCount
+    };
+  }));
+  res.json(userStats);
+}));
+
+router.put('/admin/users/:id/role', auth, adminOnly, wrap(async (req, res) => {
+  const { userType } = req.body;
+  if (!['student', 'faculty', 'staff', 'admin'].includes(userType)) {
+    return res.status(400).json({ message: 'Invalid userType' });
+  }
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  user.userType = userType;
+  await user.save();
+  res.json({ ok: true, user: pub(user) });
+}));
+
+router.get('/admin/claims', auth, adminOnly, wrap(async (req, res) => {
+  const { status } = req.query;
+  const f = status ? { status } : {};
+  const claims = await Claim.find(f)
+    .sort('-createdAt')
+    .populate('item')
+    .populate('claimant', 'name email userType department')
+    .populate('reviewedBy', 'name email')
+    .populate({ path: 'match', populate: { path: 'lost found' } })
+    .limit(200);
+  res.json(claims);
+}));
+
+router.get('/admin/matches', auth, adminOnly, wrap(async (req, res) => {
+  const { status } = req.query;
+  const f = status ? { status } : {};
+  const matches = await Match.find(f)
+    .sort('-score -createdAt')
+    .populate('lost')
+    .populate('found')
+    .populate('createdBy', 'name email')
+    .limit(200);
+  res.json(matches);
 }));
 
 // ---------- Notifications ----------

@@ -11,6 +11,9 @@ import { Auth } from './core/auth';
       <a routerLink="/report" routerLinkActive="on"><i>+</i>Report</a>
       <a routerLink="/my-items" routerLinkActive="on"><i>☰</i>My Items</a>
       <a routerLink="/profile" routerLinkActive="on"><i>○</i>Profile</a>
+      @if (auth.user()?.userType === 'admin') {
+        <a routerLink="/admin" routerLinkActive="on" style="color:#553c9a"><i>⚡</i>Admin</a>
+      }
     </nav>
   }</div>`,
 })

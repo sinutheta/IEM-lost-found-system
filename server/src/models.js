@@ -31,6 +31,10 @@ const Item = model('Item', new Schema({
   reporter: ref('User'),
   verificationQuestion: String,
   verificationAnswerHash: { type: String, select: false },
+  aiVisualDescription: String,
+  aiVisualTags: [String],
+  aiProcessedAt: Date,
+  aiConfidence: Number,
 }, { timestamps: true }));
 
 const matchSchema = new Schema({
@@ -50,6 +54,7 @@ const matchSchema = new Schema({
   method: { type: String, enum: ['keyword','ai','manual'], default: 'keyword' },
   reason: String,                      // AI explanation or "Linked manually by ..."
   photos: { type: Number, default: 0 }, // how many photos the AI looked at (0-2)
+  visualSimilarity: Number,
   createdBy: ref('User'),              // set for manual matches
   status: { type: String, enum: ['suggested','claimed','resolved','dismissed'], default: 'suggested' },
 }, { timestamps: true });

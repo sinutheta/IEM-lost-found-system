@@ -1,15 +1,18 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { Auth } from '../core/auth';
 import { Api, Item } from '../core/api';
 
 @Component({
-  standalone: true, imports: [FormsModule],
+  standalone: true, imports: [FormsModule, RouterLink],
   template: `<header class="bar"><h2>Profile</h2></header>
   <div class="pad">
     <div class="box who"><div class="avatar"></div><div><b>{{ auth.user()?.name }}</b><small>{{ auth.user()?.email }}</small><small>{{ auth.user()?.userType }} · {{ auth.user()?.department }}</small></div></div>
 
     @if (auth.user()?.userType === 'admin') {
+      <a routerLink="/admin" class="btn" style="background:#553c9a;border-color:#553c9a;margin:12px 0;text-align:center">⚡ Open Full Admin Console & Database</a>
+
       <div class="label">ADMIN DASHBOARD STATISTICS</div>
       <div class="box" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;text-align:center">
         <div style="background:#fff;padding:8px;border-radius:6px;border:1px solid var(--line)">

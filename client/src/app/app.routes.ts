@@ -6,6 +6,7 @@ import { ItemDetailsComponent } from './pages/item-details.component';
 import { ReportComponent } from './pages/report.component';
 import { MyItemsComponent } from './pages/my-items.component';
 import { ProfileComponent } from './pages/profile.component';
+import { AdminComponent } from './pages/admin.component';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'home' },
@@ -15,5 +16,6 @@ export const routes: Routes = [
   { path: 'report', component: ReportComponent, canActivate: [authGuard] },
   { path: 'my-items', component: MyItemsComponent, canActivate: [authGuard] },
   { path: 'profile', component: ProfileComponent, canActivate: [authGuard] },
+  { path: 'admin', component: AdminComponent, canActivate: [authGuard] },
   { path: '**', redirectTo: 'home' },
 ];
